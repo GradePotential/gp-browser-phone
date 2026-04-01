@@ -4619,7 +4619,7 @@ function SubscribeParkSlot(){
 }
 function gpPollStatus(){
     var statusHint = SipUsername + "Status";
-    var url = "https://" + wssServer + "/api/trpc/asterisk.hintState?input=" + encodeURIComponent(JSON.stringify({json:{hint:statusHint}}));
+    var url = "https://pbx.gradepotential.com/api/trpc/asterisk.hintState?input=" + encodeURIComponent(JSON.stringify({json:{hint:statusHint}}));
     fetch(url)
     .then(function(r){ return r.json(); })
     .then(function(data){
