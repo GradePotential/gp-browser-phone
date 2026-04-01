@@ -1604,8 +1604,8 @@ function InitUi(){
     leftHTML += "<tr id=searchArea><td class=streamSection style=\"height: 35px; box-sizing: border-box; padding-top: 3px; padding-bottom: 0px;\">";
 
     // Search
-    leftHTML += "<span id=divFindBuddy class=searchClean><INPUT id=txtFindBuddy type=text autocomplete=none style=\"width: calc(100% - 78px);\"></span>";
-    leftHTML += "<button class=roundButtons id=BtnFilter style=\"margin-left:5px\"><i class=\"fa fa-sliders\"></i></button>"
+    leftHTML += "<span id=divFindBuddy class=searchClean style=\"display:none\"><INPUT id=txtFindBuddy type=text autocomplete=none style=\"width: calc(100% - 78px);\"></span>";
+    leftHTML += "<button class=roundButtons id=BtnFilter style=\"display:none\"><i class=\"fa fa-sliders\"></i></button>"
 
     leftHTML += "</td></tr>";
     leftHTML += "<tr><td class=streamSection>"
@@ -1830,9 +1830,7 @@ function ShowMyProfileMenu(obj){
     var items = [];
     items.push({ icon: "fa fa-refresh", text: lang.refresh_registration, value: 1});
     items.push({ icon: "fa fa-wrench", text: lang.configure_extension, value: 2});
-    items.push({ icon: null, text: "-" });
-    items.push({ icon: "fa fa-user-plus", text: lang.add_someone, value: 3});
-    // items.push({ icon: "fa fa-users", text: lang.create_group, value: 4}); // TODO
+    items.push({ icon: "fa fa-power-off", text: "Disconnect from PBX", value: 10});
     items.push({ icon : null, text: "-" });
     if(AutoAnswerEnabled == true){
         items.push({ icon: "fa fa-phone", text: lang.auto_answer + enabledHtml, value: 5});
@@ -1894,6 +1892,21 @@ function ShowMyProfileMenu(obj){
             }
             if(id == "9") {
                 SetStatusWindow();
+            }
+            if(id == "10") {
+                // Disconnect/Reconnect to PBX
+                if(userAgent && userAgent.isRegistered()){
+                    console.log("Disconnecting from PBX...");
+                    userAgent.registerer.unregister();
+                    userAgent.transport.attemptingReconnection = false;
+                    userAgent.registering = false;
+                    userAgent.isReRegister = false;
+                    $("#regStatus").html("Disconnected");
+                } else if(userAgent) {
+                    console.log("Reconnecting to PBX...");
+                    userAgent.transport.attemptingReconnection = true;
+                    userAgent.registerer.register();
+                }
             }
 
         },
@@ -3036,10 +3049,10 @@ function onInviteAccepted(lineObj, includeVideo, response){
     session.isOnHold = false;
     session.data.started = true;
 
-    // GP Custom: Start live transcription (skip for status toggle calls)
-    if(!window.gpIsStatusToggle){
-        gpStartTranscription(lineObj.LineNumber, session);
-    }
+    // GP Custom: Live transcription disabled for now
+    // if(!window.gpIsStatusToggle){
+    //     gpStartTranscription(lineObj.LineNumber, session);
+    // }
 
     // GP Custom: Monitor PeerConnection for remote hangup detection
     if(session.sessionDescriptionHandler && session.sessionDescriptionHandler.peerConnection){
