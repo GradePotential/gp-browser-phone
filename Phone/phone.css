@@ -1952,3 +1952,109 @@ input[type=range]{
     top: 20px;
 }
 
+
+/* GP Customizations - Remove avatars, video, chat */
+.CallPictureUnderlay { display: none !important; }
+.inCallAvatar { display: none !important; }
+.buddyIcon { 
+    background-image: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.buddyIcon::after {
+    content: "007";
+    font-family: FontAwesome;
+    font-size: 20px;
+    color: #888;
+}
+#UserProfilePic { display: none !important; }
+
+
+/* GP Custom: Park slot active animation */
+.gpParkActive {
+    animation: gpParkPulse 1s ease-in-out infinite;
+}
+@keyframes gpParkPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+
+/* GP Branding */
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;600;700;800&display=swap');
+
+body, .UiWindowPanel, .UiInputText, button, input, select, textarea {
+    font-family: 'Lato', sans-serif !important;
+}
+
+/* Header bar - dark blue background */
+#UserProfile {
+    background: #001b72 !important;
+    border-bottom: 2px solid #90daf5 !important;
+}
+#UserCallID {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+}
+#regStatus {
+    color: #90daf5 !important;
+}
+
+/* Header action buttons */
+#UserProfile .roundButtons {
+    color: #90daf5 !important;
+    background: transparent !important;
+    border-color: transparent !important;
+}
+#UserProfile .roundButtons:hover {
+    color: #ffffff !important;
+    background: rgba(144, 218, 245, 0.2) !important;
+    border-color: transparent !important;
+}
+/* Agent status button overrides */
+#BtnAgentStatus {
+    transition: all 0.3s ease !important;
+}
+#UserProfile #BtnAgentStatus.gpLoggedIn {
+    color: #ffffff !important;
+    background: #e50029 !important;
+    border-radius: 50% !important;
+}
+#UserProfile #BtnAgentStatus.gpLoggedIn:hover {
+    background: #cc0024 !important;
+}
+#UserProfile #BtnAgentStatus.gpLoggedOut {
+    color: #90daf5 !important;
+    background: transparent !important;
+}
+
+/* Buddy list selection */
+.buddySelected {
+    border-left: 3px solid #001b72 !important;
+}
+
+/* Dialpad call button */
+.dialButtonsGreen {
+    background: #001b72 !important;
+}
+
+/* In-call hangup button */
+.hangupButton {
+    background: #e50029 !important;
+    color: #ffffff !important;
+}
+
+/* Settings panel */
+.UiWindowPanel button.UiSaveButton, .UiWindowPanel button[onclick*="Save"] {
+    background: #001b72 !important;
+    color: #ffffff !important;
+    border-radius: 20px !important;
+}
+
+/* Transcript panel */
+[id*="-transcript-panel"] {
+    background: rgba(0, 27, 114, 0.85) !important;
+    border: 1px solid rgba(144, 218, 245, 0.3) !important;
+}

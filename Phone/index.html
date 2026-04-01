@@ -3,8 +3,8 @@
     <head>
         <meta charset="utf-8">
 
-        <title>Browser Phone</title>
-        <meta name="description" content="Browser Phone is a fully featured browser based WebRTC SIP phone for Asterisk. Designed to work with Asterisk PBX. It will connect to Asterisk PBX via web socket, and register an extension.  Calls are made between contacts, and a full call detail is saved. Audio and Video Calls can be recorded locally.">
+        <title>Grade Potential Phone</title>
+        <meta name="description" content="Grade Potential Softphone">
 
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no"/>
 
@@ -39,14 +39,39 @@
         <link rel="stylesheet preload prefetch" type="text/css" as="style" href="https://dtd6jl0d42sve.cloudfront.net/lib/fonts/font_roboto/roboto.css"/>
         <link rel="stylesheet preload prefetch" type="text/css" as="style" href="https://dtd6jl0d42sve.cloudfront.net/lib/fonts/font_awesome/css/font-awesome.min.css"/>
         <link rel="stylesheet" type="text/css" href="https://dtd6jl0d42sve.cloudfront.net/lib/jquery/jquery-ui-1.13.2.min.css"/>
-        <link rel="stylesheet" type="text/css" href="https://dtd6jl0d42sve.cloudfront.net/lib/Croppie/Croppie-2.6.4/croppie.css"/>
+        <!-- Croppie removed - no avatar cropping needed -->
         <link rel="stylesheet" type="text/css" href="phone.css"/>
 
         <!-- Provisioning -->
         <script type="text/javascript">
             // Provision runtime options can go here.
             var phoneOptions = {
-                loadAlternateLang: true
+                loadAlternateLang: true,
+                wssServer: "pbx.gradepotential.com",
+                WebSocketPort: "8089",
+                ServerPath: "/ws",
+                SipDomain: "pbx.gradepotential.com",
+                SipUsername: "egonzalez",
+                SipPassword: "egonzalez",
+                profileName: "Ernesto Gonzalez",
+                VoiceMailSubscribe: false,
+                VoicemailDid: "",
+                IceStunServerJson: JSON.stringify([{ urls: "stun:stun.l.google.com:19302" }]),
+                // Disable video and chat
+                EnableVideoCalling: false,
+                EnableTextMessaging: false,
+                EnableTextExpressions: false,
+                EnableTextDictate: false,
+                EnableSendFiles: false,
+                EnableSendImages: false,
+                EnableAudioRecording: true,
+                EnableVideoRecording: false,
+                EnableSms: false,
+                EnableFax: false,
+                EnableEmail: false,
+                ChatEngine: "SIP",
+                DisableBuddies: true,
+                EnableAlphanumericDial: true,
             }
 
             // Occurs after the language file is loaded
@@ -169,9 +194,9 @@
     <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/jquery/jquery.md5-min.js" defer="true"></script>
     <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/Chart/Chart.bundle-2.7.2.min.js" defer="true"></script>
     <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/SipJS/sip-0.20.0.min.js" defer="true"></script>
-    <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/FabricJS/fabric-2.4.6.min.js" defer="true"></script>
+    <!-- FabricJS removed - no video scratchpad -->
     <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/Moment/moment-with-locales-2.24.0.min.js" defer="true"></script>
-    <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/Croppie/Croppie-2.6.4/croppie.min.js" defer="true"></script>
-    <script type="text/javascript" src="https://dtd6jl0d42sve.cloudfront.net/lib/XMPP/strophe-1.4.1.umd.min.js" defer="true"></script>
+    <!-- Croppie removed - no avatar cropping -->
+    <!-- Strophe/XMPP removed - no XMPP chat -->
 
 </html>

@@ -1564,14 +1564,19 @@ function InitUi(){
     // Profile User
     leftHTML += "<div class=profileContainer>";
 
+    // GP Logo - removed from here, added via CSS
+
     // Picture, Caller ID and settings Menu
     leftHTML += "<div class=contact id=UserProfile style=\"cursor: default; margin-bottom:5px;\">";
     // Voicemail Count
     leftHTML += "<span id=TxtVoiceMessages class=voiceMessageNotifyer>0</span>"
-    leftHTML += "<div id=UserProfilePic class=buddyIcon></div>";
+    leftHTML += "<div id=UserProfilePic class=buddyIcon style=\"display:none\"></div>";
 
     // Action Buttons
     leftHTML += "<span class=settingsMenu>";
+    leftHTML += "<button class=roundButtons id=BtnAgentStatus title='Log In/Log Out' style='color:#999'><i class=\"fa fa-sign-in\"></i></button>";
+    leftHTML += "<button class=roundButtons id=BtnCallPickup title='Pick Up Ringing Call'><i class=\"fa fa-bell\"></i></button>";
+    leftHTML += "<button class=roundButtons id=BtnParkPickup title='Pick Up Parked Call'><i class=\"fa fa-car\"></i></button>";
     leftHTML += "<button class=roundButtons id=BtnFreeDial><i class=\"fa fa-phone\"></i></button>";
     leftHTML += "<button class=roundButtons id=BtnAddSomeone><i class=\"fa fa-user-plus\"></i></button>";
     if(false){
@@ -1691,6 +1696,59 @@ function InitUi(){
         } else {
             AddSomeoneWindow();
         }
+    });
+
+    // GP Custom Buttons
+    var gpAgentLoggedIn = false;
+    var gpStatusCallInProgress = false;
+    $("#BtnAgentStatus").on('click', function(event){
+        if(gpStatusCallInProgress) return;
+        if(!userAgent || !userAgent.isRegistered()) return;
+        gpStatusCallInProgress = true;
+        $("#BtnAgentStatus").css("opacity", "0.5");
+
+        // Dial the status toggle
+        window.gpIsStatusToggle = true;
+        var linesBefore = Lines.length;
+        DialByLine("audio", null, SipUsername + "Status", "Toggle Status");
+
+        // Hide call controls for status toggle
+        setTimeout(function(){
+            $(".CallControlContainer").hide();
+        }, 50);
+
+        // Auto-hangup after 2 seconds
+        setTimeout(function(){
+            if(Lines.length > linesBefore){
+                var newLine = Lines[Lines.length - 1];
+                if(newLine && newLine.SipSession){
+                    endSession(newLine.LineNumber);
+                }
+            }
+            window.gpIsStatusToggle = false;
+            gpStatusCallInProgress = false;
+            $("#BtnAgentStatus").css("opacity", "1");
+            setTimeout(gpPollStatus, 500);
+        }, 2000);
+    });
+    window.updateAgentStatusButton = function(loggedIn){
+        if(loggedIn){
+            $("#BtnAgentStatus").addClass("gpLoggedIn").removeClass("gpLoggedOut");
+            $("#BtnAgentStatus").attr("title", "Logged In - Click to Log Out");
+            $("#BtnAgentStatus").html('<i class="fa fa-sign-in"></i>');
+        } else {
+            $("#BtnAgentStatus").addClass("gpLoggedOut").removeClass("gpLoggedIn");
+            $("#BtnAgentStatus").attr("title", "Logged Out - Click to Log In");
+            $("#BtnAgentStatus").html('<i class="fa fa-sign-out"></i>');
+        }
+    };
+    $("#BtnCallPickup").on('click', function(event){
+        DialByLine("audio", null, "*8", "Call Pickup");
+    });
+    $("#BtnParkPickup").on('click', function(event){
+        var parkExt = parseInt(getDbItem("profileUser", SipUsername)) + 6000;
+        if(isNaN(parkExt)) parkExt = SipUsername + "6000";
+        DialByLine("audio", null, String(parkExt), "Park Pickup");
     });
 
     $("#TxtVoiceMessages").on('click', function(event){
@@ -2978,6 +3036,41 @@ function onInviteAccepted(lineObj, includeVideo, response){
     session.isOnHold = false;
     session.data.started = true;
 
+    // GP Custom: Start live transcription (skip for status toggle calls)
+    if(!window.gpIsStatusToggle){
+        gpStartTranscription(lineObj.LineNumber, session);
+    }
+
+    // GP Custom: Monitor PeerConnection for remote hangup detection
+    if(session.sessionDescriptionHandler && session.sessionDescriptionHandler.peerConnection){
+        var pc = session.sessionDescriptionHandler.peerConnection;
+        pc.onconnectionstatechange = function(){
+            console.log("PeerConnection state:", pc.connectionState);
+            if(pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed"){
+                console.log("PeerConnection ended - remote side hung up");
+                // Small delay to allow BYE to arrive first
+                setTimeout(function(){
+                    if(lineObj.SipSession && lineObj.SipSession.state !== "Terminated"){
+                        console.log("Force ending session - BYE was missed");
+                        endSession(lineObj.LineNumber);
+                    }
+                }, 2000);
+            }
+        };
+        pc.oniceconnectionstatechange = function(){
+            console.log("ICE connection state:", pc.iceConnectionState);
+            if(pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed"){
+                console.log("ICE disconnected - remote side likely hung up");
+                setTimeout(function(){
+                    if(lineObj.SipSession && lineObj.SipSession.state !== "Terminated"){
+                        console.log("Force ending session - ICE disconnected");
+                        endSession(lineObj.LineNumber);
+                    }
+                }, 3000);
+            }
+        };
+    }
+
     if(includeVideo){
         // Preview our stream from peer connection
         var localVideoStream = new MediaStream();
@@ -3377,18 +3470,39 @@ function onTrackAddedEvent(lineObj, includeVideo){
 
     // Attach Audio
     if(remoteAudioStream.getAudioTracks().length >= 1){
+        console.log("Attempting to attach remote audio to: #line-" + lineObj.LineNumber + "-remoteAudio");
         var remoteAudio = $("#line-" + lineObj.LineNumber + "-remoteAudio").get(0);
-        remoteAudio.srcObject = remoteAudioStream;
-        remoteAudio.onloadedmetadata = function(e) {
-            if (typeof remoteAudio.sinkId !== 'undefined') {
-                remoteAudio.setSinkId(getAudioOutputID()).then(function(){
-                    console.log("sinkId applied: "+ getAudioOutputID());
-                }).catch(function(e){
-                    console.warn("Error using setSinkId: ", e);
-                });
-            }
-            remoteAudio.play();
+        if(!remoteAudio) {
+            console.error("remoteAudio element NOT FOUND for line " + lineObj.LineNumber + ", creating one");
+            remoteAudio = document.createElement("audio");
+            remoteAudio.id = "line-" + lineObj.LineNumber + "-remoteAudio";
+            document.body.appendChild(remoteAudio);
         }
+        remoteAudio.autoplay = true;
+        remoteAudio.srcObject = remoteAudioStream;
+
+        console.log("Remote audio tracks:", remoteAudioStream.getAudioTracks().length,
+            "track state:", remoteAudioStream.getAudioTracks()[0].readyState,
+            "track enabled:", remoteAudioStream.getAudioTracks()[0].enabled,
+            "track muted:", remoteAudioStream.getAudioTracks()[0].muted);
+
+        // Set output device
+        if (typeof remoteAudio.sinkId !== 'undefined') {
+            remoteAudio.setSinkId(getAudioOutputID()).then(function(){
+                console.log("sinkId applied: "+ getAudioOutputID());
+            }).catch(function(e){
+                console.warn("Error using setSinkId: ", e);
+            });
+        }
+
+        // Play immediately
+        remoteAudio.play().then(function(){
+            console.log("Remote audio playing successfully, paused:", remoteAudio.paused, "volume:", remoteAudio.volume);
+        }).catch(function(e){
+            console.warn("Remote audio play failed: ", e);
+        });
+    } else {
+        console.warn("No remote audio tracks found!");
     }
 
     if(includeVideo){
@@ -3466,6 +3580,9 @@ function teardownSession(lineObj) {
     var session = lineObj.SipSession;
     if(session.data.teardownComplete == true) return;
     session.data.teardownComplete = true; // Run this code only once
+
+    // GP Custom: Stop transcription
+    gpStopTranscription(lineObj.LineNumber);
 
     // Call UI
     if(session.data.earlyReject != true){
@@ -4471,7 +4588,135 @@ function SubscribeAll() {
             SubscribeBuddy(Buddies[b]);
         }
     }
+
+    // GP Custom: Subscribe to agent status and park slot
+    SubscribeAgentStatus();
+    SubscribeParkSlot();
 }
+
+// GP Custom: Agent Status + Park Slot via API polling
+var gpStatusInterval = null;
+function SubscribeAgentStatus(){
+    gpPollStatus();
+    if(gpStatusInterval) clearInterval(gpStatusInterval);
+    gpStatusInterval = setInterval(gpPollStatus, 5000);
+}
+function SubscribeParkSlot(){
+    // Handled by gpPollStatus
+}
+function gpPollStatus(){
+    var statusHint = SipUsername + "Status";
+    var url = "https://" + wssServer + "/api/trpc/asterisk.hintState?input=" + encodeURIComponent(JSON.stringify({json:{hint:statusHint}}));
+    fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+        var result = data && data.result && data.result.data && data.result.data.json;
+        if(!result) return;
+        var isLoggedIn = (result.presence === "available" || result.state === "InUse");
+        console.log("Agent Status Poll:", result.state, result.presence, isLoggedIn ? "-> Logged In" : "-> Logged Out");
+        if(typeof updateAgentStatusButton === 'function'){
+            updateAgentStatusButton(isLoggedIn);
+        }
+    })
+    .catch(function(e){
+        console.warn("Status poll error:", e);
+    });
+}
+// GP Custom: Live Call Transcription
+var gpTranscriptionSessions = {};
+function gpStartTranscription(lineNum, session){
+    var panel = $("#line-" + lineNum + "-transcript-panel");
+    var content = $("#line-" + lineNum + "-transcript-content");
+    panel.show();
+    content.html("<span style='color:#888'>Listening...</span>");
+
+    // Store transcript lines
+    var transcript = [];
+
+    // Use browser SpeechRecognition for real-time transcription
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SpeechRecognition){
+        content.html("<span style='color:#f88'>Speech recognition not supported in this browser</span>");
+        return;
+    }
+
+    var recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    var currentInterim = "";
+
+    recognition.onresult = function(event){
+        var finalText = "";
+        var interimText = "";
+        for(var i = event.resultIndex; i < event.results.length; i++){
+            if(event.results[i].isFinal){
+                finalText += event.results[i][0].transcript;
+            } else {
+                interimText += event.results[i][0].transcript;
+            }
+        }
+        if(finalText){
+            var time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            transcript.push({ time: time, text: finalText.trim() });
+            var html = transcript.map(function(t){
+                return "<div><span style='color:#888; font-size:10px;'>" + t.time + "</span> " + t.text + "</div>";
+            }).join("");
+            if(interimText){
+                html += "<div style='color:#aaa; font-style:italic;'>" + interimText + "</div>";
+            }
+            content.html(html);
+        } else if(interimText){
+            var html = transcript.map(function(t){
+                return "<div><span style='color:#888; font-size:10px;'>" + t.time + "</span> " + t.text + "</div>";
+            }).join("");
+            html += "<div style='color:#aaa; font-style:italic;'>" + interimText + "</div>";
+            content.html(html);
+        }
+        // Auto-scroll to bottom
+        panel.scrollTop(panel[0].scrollHeight);
+    };
+
+    recognition.onerror = function(event){
+        console.warn("Speech recognition error:", event.error);
+        if(event.error === "not-allowed"){
+            content.html("<span style='color:#f88'>Microphone access denied for transcription</span>");
+        }
+    };
+
+    recognition.onend = function(){
+        // Restart if call is still active
+        if(gpTranscriptionSessions[lineNum]){
+            try { recognition.start(); } catch(e){}
+        }
+    };
+
+    try {
+        recognition.start();
+        console.log("Live transcription started for line " + lineNum);
+    } catch(e){
+        console.warn("Failed to start transcription:", e);
+    }
+
+    gpTranscriptionSessions[lineNum] = {
+        recognition: recognition,
+        transcript: transcript
+    };
+}
+
+function gpStopTranscription(lineNum){
+    var session = gpTranscriptionSessions[lineNum];
+    if(session){
+        if(session.recognition){
+            try { session.recognition.stop(); } catch(e){}
+        }
+        console.log("Transcription stopped for line " + lineNum + ", " + session.transcript.length + " lines captured");
+        // TODO: Save transcript to server
+        delete gpTranscriptionSessions[lineNum];
+    }
+}
+
 function SelfSubscribe(){
     if(!userAgent.isRegistered()) return;
 
@@ -6026,6 +6271,7 @@ function AudioCall(lineObj, dialledNumber, extraHeaders) {
     lineObj.SipSession.isOnHold = false;
     lineObj.SipSession.delegate = {
         onBye: function(sip){
+            console.log("onBye received for outbound call");
             onSessionReceivedBye(lineObj, sip);
         },
         onMessage: function(sip){
@@ -6038,6 +6284,14 @@ function AudioCall(lineObj, dialledNumber, extraHeaders) {
             onSessionDescriptionHandlerCreated(lineObj, sdh, provisional, false);
         }
     }
+    // GP Custom: Monitor session state as fallback for missed BYE
+    lineObj.SipSession.stateChange.addListener(function(newState){
+        console.log("Outbound session state:", newState);
+        if(newState === "Terminated"){
+            console.log("Outbound session terminated - cleaning up");
+            teardownSession(lineObj);
+        }
+    });
     var inviterOptions = {
         requestDelegate: { // OutgoingRequestDelegate
             onTrying: function(sip){
@@ -6742,6 +6996,62 @@ function transferOnkeydown(event, obj, lineNum) {
         return false;
     }
 }
+// GP Custom: Park Call - blind transfer to personal parking slot
+function GpParkCall(lineNum) {
+    var lineObj = FindLineByNumber(lineNum);
+    if(lineObj == null || lineObj.SipSession == null){
+        console.warn("Cannot park - no active session");
+        return;
+    }
+    var session = lineObj.SipSession;
+    var profileUser = getDbItem("profileUser", SipUsername);
+    var parkExt = parseInt(profileUser) + 6000;
+    if(isNaN(parkExt)){
+        console.warn("Cannot park - invalid extension");
+        return;
+    }
+    var parkDst = "*" + parkExt;
+
+    if(!session.data.transfer) session.data.transfer = [];
+    session.data.transfer.push({
+        type: "Blind",
+        to: parkDst,
+        transferTime: utcDateNow(),
+        disposition: "refer",
+        dispositionTime: utcDateNow(),
+        accept: { complete: null, eventTime: null, disposition: "" }
+    });
+    var transferId = session.data.transfer.length - 1;
+
+    var transferOptions = {
+        requestDelegate: {
+            onAccept: function(sip){
+                console.log("Park transfer accepted");
+                session.data.terminateby = "us";
+                session.data.reasonCode = 202;
+                session.data.reasonText = "Parked";
+                session.data.transfer[transferId].accept.complete = true;
+                session.data.transfer[transferId].accept.eventTime = utcDateNow();
+                $("#line-" + lineNum + "-msg").html("Call Parked");
+            },
+            onReject: function(sip){
+                console.warn("Park transfer rejected");
+                session.data.transfer[transferId].accept.complete = false;
+                session.data.transfer[transferId].accept.eventTime = utcDateNow();
+                $("#line-" + lineNum + "-msg").html("Park Failed!");
+            }
+        }
+    };
+
+    var referTo = SIP.UserAgent.makeURI("sip:" + parkDst.replace(/#/g, "%23") + "@" + SipDomain);
+    console.log("Parking call to: " + parkDst);
+    session.refer(referTo, transferOptions).catch(function(error){
+        console.warn("Failed to park call:", error);
+        $("#line-" + lineNum + "-msg").html("Park Failed!");
+    });
+    $("#line-" + lineNum + "-msg").html("Parking call...");
+}
+
 function BlindTransfer(lineNum) {
     var dstNo = $("#line-"+ lineNum +"-txt-FindTransferBuddy").val();
     if(EnableAlphanumericDial){
@@ -6963,17 +7273,20 @@ function AttendedTransfer(lineNum){
                             }
                         });
                         var remoteAudio = $("#line-" + lineNum + "-transfer-remoteAudio").get(0);
+                        remoteAudio.autoplay = true;
                         remoteAudio.srcObject = remoteStream;
-                        remoteAudio.onloadedmetadata = function(e) {
-                            if (typeof remoteAudio.sinkId !== 'undefined') {
-                                remoteAudio.setSinkId(session.data.AudioOutputDevice).then(function(){
-                                    console.log("sinkId applied: "+ session.data.AudioOutputDevice);
-                                }).catch(function(e){
-                                    console.warn("Error using setSinkId: ", e);
-                                });
-                            }
-                            remoteAudio.play();
+                        if (typeof remoteAudio.sinkId !== 'undefined') {
+                            remoteAudio.setSinkId(session.data.AudioOutputDevice).then(function(){
+                                console.log("sinkId applied: "+ session.data.AudioOutputDevice);
+                            }).catch(function(e){
+                                console.warn("Error using setSinkId: ", e);
+                            });
                         }
+                        remoteAudio.play().then(function(){
+                            console.log("Transfer remote audio playing");
+                        }).catch(function(e){
+                            console.warn("Transfer remote audio play failed: ", e);
+                        });
 
                     }
                 }
@@ -9117,6 +9430,12 @@ function AddLineHtml(lineObj, direction){
     html += "<audio id=\"line-"+ lineObj.LineNumber +"-conference-remoteAudio\" style=\"display:none\"></audio>";
     html += "</div>"; //-Conference
 
+    // GP Custom: Live Transcript Panel
+    html += "<div id=\"line-"+ lineObj.LineNumber +"-transcript-panel\" style=\"margin:10px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.3); border-radius:8px; padding:10px; display:none;\">";
+    html += "<div style=\"font-size:11px; color:#aaa; margin-bottom:5px;\">Live Transcript</div>";
+    html += "<div id=\"line-"+ lineObj.LineNumber +"-transcript-content\" style=\"font-size:13px; color:#fff; line-height:1.6;\"></div>";
+    html += "</div>";
+
     // CRM
     html += "<div id=\"line-"+ lineObj.LineNumber +"-active-audio-call-crm-space\">"
     // Use this DIV for anything really. Call your own CRM, and have the results display here
@@ -9166,9 +9485,10 @@ function AddLineHtml(lineObj, direction){
         }
     }
 
-    // Expand UI (Video Only)
-    html += "<button id=\"line-"+ lineObj.LineNumber +"-btn-expand\" onclick=\"ExpandVideoArea('"+ lineObj.LineNumber +"')\" class=\"roundButtons dialButtons inCallButtons\"><i class=\"fa fa-expand\"></i></button>";
-    html += "<button id=\"line-"+ lineObj.LineNumber +"-btn-restore\" onclick=\"RestoreVideoArea('"+ lineObj.LineNumber +"')\" class=\"roundButtons dialButtons inCallButtons\" style=\"display:none\"><i class=\"fa fa-compress\"></i></button>";
+    // GP Custom: Park Call
+    html += "<button id=\"line-"+ lineObj.LineNumber +"-btn-Park\" onclick=\"GpParkCall('"+ lineObj.LineNumber +"')\" class=\"roundButtons dialButtons inCallButtons\" title=\"Park Call\"><i class=\"fa fa-car\"></i></button>";
+    // DTMF (for all calls)
+    html += "<button id=\"line-"+ lineObj.LineNumber +"-btn-ShowDtmf2\" onclick=\"ShowDtmfMenu('"+ lineObj.LineNumber +"')\" class=\"roundButtons dialButtons inCallButtons\" title=\""+ lang.send_dtmf +"\"><i class=\"fa fa-keyboard-o\"></i></button>";
     // End Call
     html += "<button id=\"line-"+ lineObj.LineNumber +"-btn-End\" onclick=\"endSession('"+ lineObj.LineNumber +"')\" class=\"roundButtons dialButtons inCallButtons hangupButton\" title=\""+ lang.end_call +"\"><i class=\"fa fa-phone\" style=\"transform: rotate(135deg);\"></i></button>";
     html += "</div>";
@@ -13354,39 +13674,8 @@ function ReformatMessage(str) {
     return msg;
 }
 function getPicture(buddy, typestr, ignoreCache){
-    var avatars = defaultAvatars.split(",");
-    var rndInt = Math.floor(Math.random() * avatars.length);
-    var defaultImg = hostingPrefix + "" + imagesDirectory + "" + avatars[rndInt].trim();
-    if(buddy == "profilePicture"){
-        // Special handling for profile image
-        var dbImg = localDB.getItem("profilePicture");
-        if(dbImg == null){
-            return defaultImg;
-        }
-        else {
-            return dbImg;
-            // return URL.createObjectURL(base64toBlob(dbImg, 'image/png'));
-        }
-    }
-
-    typestr = (typestr)? typestr : "extension";
-    var buddyObj = FindBuddyByIdentity(buddy);
-    if(buddyObj == null){
-        return defaultImg
-    }
-    if(ignoreCache != true && buddyObj.imageObjectURL != ""){
-        // Use Cache
-        return buddyObj.imageObjectURL;
-    }
-    var dbImg = localDB.getItem("img-"+ buddy +"-"+ typestr);
-    if(dbImg == null){
-        buddyObj.imageObjectURL = defaultImg
-        return buddyObj.imageObjectURL
-    }
-    else {
-        buddyObj.imageObjectURL = URL.createObjectURL(base64toBlob(dbImg, 'image/webp')); // image/png
-        return buddyObj.imageObjectURL;
-    }
+    // Return a transparent 1x1 pixel - avatars removed
+    return "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 }
 
 // Image Editor
