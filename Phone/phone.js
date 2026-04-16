@@ -7046,6 +7046,13 @@ function GpParkCall(lineNum) {
                 session.data.transfer[transferId].accept.complete = true;
                 session.data.transfer[transferId].accept.eventTime = utcDateNow();
                 $("#line-" + lineNum + "-msg").html("Call Parked");
+                // Release the SIP session so the channel on the PBX
+                // is torn down and the device state flips to NOT_INUSE,
+                // clearing the busy flag. Matches BlindTransfer() cleanup.
+                session.bye().catch(function(error){
+                    console.warn("Could not BYE after park transfer:", error);
+                });
+                teardownSession(lineObj);
             },
             onReject: function(sip){
                 console.warn("Park transfer rejected");
