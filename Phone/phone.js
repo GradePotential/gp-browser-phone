@@ -2642,6 +2642,26 @@ function ReceiveCall(session) {
         if(CurrentCalls == 0){ // There are no other calls, so you can answer
             console.log("Going to Auto Answer this call...");
             window.setTimeout(function(){
+                // Play a short beep to alert the user that the call was
+                // auto-answered (click-to-call, park pickup, etc.).
+                // Physical Aastra phones generate this beep in firmware
+                // when they see Call-Info: answer-after=0; the browser
+                // phone needs to do it in software.
+                try {
+                    var beepCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    var osc = beepCtx.createOscillator();
+                    var gain = beepCtx.createGain();
+                    osc.type = "sine";
+                    osc.frequency.value = 800;
+                    gain.gain.value = 0.3;
+                    osc.connect(gain);
+                    gain.connect(beepCtx.destination);
+                    osc.start();
+                    osc.stop(beepCtx.currentTime + 0.2);
+                } catch(e) {
+                    console.warn("Could not play auto-answer beep:", e);
+                }
+
                 // If the call is with video, assume the auto answer is also
                 // In order for this to work nicely, the recipient maut be "ready" to accept video calls
                 // In order to ensure video call compatibility (i.e. the recipient must have their web cam in, and working)
